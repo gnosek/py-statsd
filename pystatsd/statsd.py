@@ -70,6 +70,17 @@ class Client(object):
         data = dict((stat, "%s|c" % delta) for stat in stats)
         self.send(data, sample_rate)
 
+    def absolute_counter(self, stats, value):
+        """
+        Updates one or more absolute counter to a set value
+        >>> statsd_client.absolute_counter('some.counter',1000)
+        """
+        if not isinstance(stats, list):
+            stats = [stats]
+
+        data = dict((stat, "%s|abs" % delta) for stat in stats)
+        self.send(data, sample_rate)
+
     def send(self, data, sample_rate=1):
         """
         Squirt the metrics over UDP

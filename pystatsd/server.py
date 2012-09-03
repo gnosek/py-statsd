@@ -71,6 +71,7 @@ class Server(object):
 
         self.counters = {}
         self.timers = {}
+        self.previous = {}
         self.flusher = 0
 
     def process(self, data):
@@ -92,6 +93,16 @@ class Server(object):
                 if key not in self.timers:
                     self.timers[key] = []
                 self.timers[key].append(float(fields[0] or 0))
+            elif (fields[1] == 'abs'):
+                value = float(fields[0])
+                if key in self.previous:
+                    delta = value - self.previous[key]
+                    if delta < 0:
+                        continue
+                    if key not in self.counters:
+                        self.counters[key] = 0
+                    self.counters[key] += delta
+                self.previous[key] = value
             else:
                 if len(fields) == 3:
                     sample_rate = float(re.match('^@([\d\.]+)', fields[2]).groups()[0])
