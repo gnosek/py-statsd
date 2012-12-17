@@ -78,8 +78,8 @@ class Client(object):
         if not isinstance(stats, list):
             stats = [stats]
 
-        data = dict((stat, "%s|abs" % delta) for stat in stats)
-        self.send(data, sample_rate)
+        data = dict((stat, "%s|abs" % value) for stat in stats)
+        self.send(data, sample_rate=1)
 
     def send(self, data, sample_rate=1):
         """
