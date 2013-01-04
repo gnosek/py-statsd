@@ -95,6 +95,18 @@ class Client(object):
         data = dict((stat, "%s|g" % value) for stat in stats)
         self.send(data, sample_rate=1)
 
+    def cancel_stat(self, stats):
+        """
+        Don't publish a stat any more if no new values come
+        (otherwise we get a stream of zeros)
+        >>> statsd_client.cancel_stat('some.counter')
+        """
+        if not isinstance(stats, list):
+            stats = [stats]
+
+        data = dict((stat, "0|dc") for stat in stats)
+        self.send(data, sample_rate=1)
+
     def send(self, data, sample_rate=1):
         """
         Squirt the metrics over UDP

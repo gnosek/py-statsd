@@ -107,6 +107,15 @@ class Server(object):
             elif (fields[1] == 'g'):
                 value = float(fields[0])
                 self.gauges[key] = value
+            elif (fields[1] == 'dc'):
+                if self.counters.get(key) == 0:
+                    del self.counters[key]
+                if self.previous.get(key) == 0:
+                    del self.previous[key]
+                if self.timers.get(key) == []:
+                    del self.timers[key]
+                if self.gauges.get(key) == 0:
+                    del self.gauges[key]
             else:
                 if len(fields) == 3:
                     sample_rate = float(re.match('^@([\d\.]+)', fields[2]).groups()[0])
