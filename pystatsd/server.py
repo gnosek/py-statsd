@@ -70,6 +70,7 @@ class Server(object):
         self.debug = debug
 
         self.counters = {}
+        self.gauges = {}
         self.timers = {}
         self.previous = {}
         self.flusher = 0
@@ -103,6 +104,9 @@ class Server(object):
                         self.counters[key] = 0
                     self.counters[key] += delta
                 self.previous[key] = value
+            elif (fields[1] == 'g'):
+                value = float(fields[0])
+                self.gauges[key] = value
             else:
                 if len(fields) == 3:
                     sample_rate = float(re.match('^@([\d\.]+)', fields[2]).groups()[0])
@@ -135,6 +139,23 @@ class Server(object):
                 g.send(k, v, "double", "count", "both", 60, self.dmax, "_counters", self.ganglia_spoof_host)
 
             self.counters[k] = 0
+            stats += 1
+
+        for k, v in self.gauges.items():
+            v = float(v)
+
+            if self.debug:
+                print "Sending %s => gauge=%s" % (k, v)
+
+            if self.transport == 'graphite':
+                msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
+                stat_string += msg
+            else:
+                # We put counters in _counters group. Underscore is to make sure counters show up
+                # first in the GUI. Change below if you disagree
+                g.send(k, v, "double", "count", "both", 60, self.dmax, "_counters", self.ganglia_spoof_host)
+
+            self.gauges[k] = 0
             stats += 1
 
         for k, v in self.timers.items():

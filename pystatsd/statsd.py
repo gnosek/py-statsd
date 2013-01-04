@@ -73,12 +73,26 @@ class Client(object):
     def absolute_counter(self, stats, value):
         """
         Updates one or more absolute counter to a set value
+
+        (the difference from previous value is stored in graphite)
         >>> statsd_client.absolute_counter('some.counter',1000)
         """
         if not isinstance(stats, list):
             stats = [stats]
 
         data = dict((stat, "%s|abs" % value) for stat in stats)
+        self.send(data, sample_rate=1)
+
+    def gauge(self, stats, value):
+        """
+        Updates one or more gauge to a set value, stored directly
+        in graphite
+        >>> statsd_client.gauge('gauge',1000)
+        """
+        if not isinstance(stats, list):
+            stats = [stats]
+
+        data = dict((stat, "%s|g" % value) for stat in stats)
         self.send(data, sample_rate=1)
 
     def send(self, data, sample_rate=1):
