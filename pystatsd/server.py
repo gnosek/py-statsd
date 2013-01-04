@@ -164,7 +164,6 @@ class Server(object):
                 # first in the GUI. Change below if you disagree
                 g.send(k, v, "double", "count", "both", 60, self.dmax, "_counters", self.ganglia_spoof_host)
 
-            self.gauges[k] = 0
             stats += 1
 
         for k, v in self.timers.items():
