@@ -72,6 +72,7 @@ class Server(object):
         self.counters = {}
         self.gauges = {}
         self.timers = {}
+        self.absolute = {}
         self.previous = {}
         self.flusher = 0
 
@@ -96,21 +97,14 @@ class Server(object):
                 self.timers[key].append(float(fields[0] or 0))
             elif (fields[1] == 'abs'):
                 value = float(fields[0])
-                if key in self.previous:
-                    delta = value - self.previous[key]
-                    if delta < 0:
-                        continue
-                    if key not in self.counters:
-                        self.counters[key] = 0
-                    self.counters[key] += delta
-                self.previous[key] = value
+                self.absolute[key] = value
             elif (fields[1] == 'g'):
                 value = float(fields[0])
                 self.gauges[key] = value
             elif (fields[1] == 'dc'):
                 if self.counters.get(key) == 0:
                     del self.counters[key]
-                if self.previous.get(key) == 0:
+                if key not in self.absolute:
                     del self.previous[key]
                 if self.timers.get(key) == []:
                     del self.timers[key]
@@ -149,6 +143,30 @@ class Server(object):
 
             self.counters[k] = 0
             stats += 1
+
+
+        for k, v in self.absolute.items():
+            pt, prev = self.previous.get(k, (None, None))
+            self.previous[k] = (ts, v)
+            if prev is None:
+                continue
+
+            v = (float(v) - float(prev)) / (ts - pt)
+
+            if self.debug:
+                print "Sending %s => absolute=%s" % (k, v)
+
+            if self.transport == 'graphite':
+                msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
+                stat_string += msg
+            else:
+                # We put counters in _counters group. Underscore is to make sure counters show up
+                # first in the GUI. Change below if you disagree
+                g.send(k, v, "double", "count", "both", 60, self.dmax, "_counters", self.ganglia_spoof_host)
+
+            stats += 1
+        self.absolute = {}
+
 
         for k, v in self.gauges.items():
             v = float(v)
