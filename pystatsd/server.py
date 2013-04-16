@@ -44,7 +44,7 @@ class Server(object):
     def __init__(self, pct_threshold=90, debug=False, transport='graphite',
                  ganglia_host='localhost', ganglia_port=8649,
                  ganglia_spoof_host='statd:statd', graphite_host='localhost',
-                 graphite_port=2003, flush_interval=10000,
+                 graphite_port=2003, flush_interval=10000, gauge_hold=1,
                  no_aggregate_counters=False, counters_prefix='stats',
                  timers_prefix='stats.timers'):
         self.buf = 8192
@@ -75,6 +75,7 @@ class Server(object):
         self.absolute = {}
         self.previous = {}
         self.flusher = 0
+        self.gauge_hold = gauge_hold
 
     def process(self, data):
         bits = data.split(':')
@@ -100,7 +101,7 @@ class Server(object):
                 self.absolute[key] = value
             elif (fields[1] == 'g'):
                 value = float(fields[0])
-                self.gauges[key] = value
+                self.gauges[key] = (value, self.gauge_hold+1)
             elif (fields[1] == 'dc'):
                 if self.counters.get(key) == 0:
                     del self.counters[key]
@@ -168,11 +169,11 @@ class Server(object):
         self.absolute = {}
 
 
-        for k, v in self.gauges.items():
+        for k, (v, ttl) in self.gauges.items():
             v = float(v)
 
             if self.debug:
-                print "Sending %s => gauge=%s" % (k, v)
+                print "Sending %s => gauge=%s [ttl=%d]" % (k, v, ttl)
 
             if self.transport == 'graphite':
                 msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
@@ -183,6 +184,12 @@ class Server(object):
                 g.send(k, v, "double", "count", "both", 60, self.dmax, "_counters", self.ganglia_spoof_host)
 
             stats += 1
+            ttl -= 1
+
+            if ttl == 0:
+                del self.gauges[k]
+            else:
+                self.gauges[k] = (v, ttl)
 
         for k, v in self.timers.items():
             if len(v) > 0:
@@ -290,6 +297,7 @@ class ServerDaemon(Daemon):
                         ganglia_spoof_host=options.ganglia_spoof_host,
                         ganglia_port=options.ganglia_port,
                         flush_interval=options.flush_interval,
+                        gauge_hold=options.gauge_hold,
                         no_aggregate_counters=options.no_aggregate_counters,
                         counters_prefix=options.counters_prefix,
                         timers_prefix=options.timers_prefix)
@@ -311,6 +319,7 @@ def run_server():
     parser.add_argument('--ganglia-host', dest='ganglia_host', help='host to connect to ganglia on', type=str, default='localhost')
     parser.add_argument('--ganglia-spoof-host', dest='ganglia_spoof_host', help='host to report metrics as to ganglia', type=str, default='statd:statd')
     parser.add_argument('--flush-interval', dest='flush_interval', help='how often to send data to graphite in millis (default: 10000)', type=int, default=10000)
+    parser.add_argument('--gauge-hold', dest='gauge_hold', help='how long to keep gauges from dead metrics in flush intervals (default: 1)', type=int, default=1)
     parser.add_argument('--no-aggregate-counters', dest='no_aggregate_counters', help='should statsd report counters as absolute instead of count/sec', action='store_true')
     parser.add_argument('--counters-prefix', dest='counters_prefix', help='prefix to append before sending counter data to graphite (default: stats)', type=str, default='stats')
     parser.add_argument('--timers-prefix', dest='timers_prefix', help='prefix to append before sending timing data to graphite (default: stats.timers)', type=str, default='stats.timers')
