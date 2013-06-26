@@ -41,25 +41,13 @@ TIMER_MSG = '''%(prefix)s.%(key)s.lower %(min)s %(ts)s
 
 class Server(object):
 
-    def __init__(self, pct_threshold=90, debug=False, transport='graphite',
-                 ganglia_host='localhost', ganglia_port=8649,
-                 ganglia_spoof_host='statd:statd', graphite_host='localhost',
+    def __init__(self, pct_threshold=90, debug=False, graphite_host='localhost',
                  graphite_port=2003, flush_interval=10000, gauge_hold=1,
                  no_aggregate_counters=False, counters_prefix='stats',
                  timers_prefix='stats.timers'):
         self.buf = 8192
         self.flush_interval = flush_interval
         self.pct_threshold = pct_threshold
-        self.transport = transport
-        # Ganglia specific settings
-        self.ganglia_host = ganglia_host
-        self.ganglia_port = ganglia_port
-        self.ganglia_protocol = "udp"
-        # Set DMAX to flush interval plus 20%. That should avoid metrics to prematurely expire if there is
-        # some type of a delay when flushing
-        self.dmax = int(self.flush_interval * 1.2)
-        # What hostname should these metrics be attached to.
-        self.ganglia_spoof_host = ganglia_spoof_host
 
         # Graphite specific settings
         self.graphite_host = graphite_host
@@ -121,11 +109,7 @@ class Server(object):
     def flush(self):
         ts = int(time.time())
         stats = 0
-
-        if self.transport == 'graphite':
-            stat_string = ''
-        else:
-            g = gmetric.Gmetric(self.ganglia_host, self.ganglia_port, self.ganglia_protocol)
+        stat_string = ''
 
         for k, v in self.counters.items():
             v = float(v)
@@ -134,13 +118,8 @@ class Server(object):
             if self.debug:
                 print "Sending %s => count=%s" % (k, v)
 
-            if self.transport == 'graphite':
-                msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
-                stat_string += msg
-            else:
-                # We put counters in _counters group. Underscore is to make sure counters show up
-                # first in the GUI. Change below if you disagree
-                g.send(k, v, "double", "count", "both", 60, self.dmax, "_counters", self.ganglia_spoof_host)
+            msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
+            stat_string += msg
 
             self.counters[k] = 0
             stats += 1
@@ -157,13 +136,8 @@ class Server(object):
             if self.debug:
                 print "Sending %s => absolute=%s" % (k, v)
 
-            if self.transport == 'graphite':
-                msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
-                stat_string += msg
-            else:
-                # We put counters in _counters group. Underscore is to make sure counters show up
-                # first in the GUI. Change below if you disagree
-                g.send(k, v, "double", "count", "both", 60, self.dmax, "_counters", self.ganglia_spoof_host)
+            msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
+            stat_string += msg
 
             stats += 1
         self.absolute = {}
@@ -175,13 +149,8 @@ class Server(object):
             if self.debug:
                 print "Sending %s => gauge=%s [ttl=%d]" % (k, v, ttl)
 
-            if self.transport == 'graphite':
-                msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
-                stat_string += msg
-            else:
-                # We put counters in _counters group. Underscore is to make sure counters show up
-                # first in the GUI. Change below if you disagree
-                g.send(k, v, "double", "count", "both", 60, self.dmax, "_counters", self.ganglia_spoof_host)
+            msg = '%s.%s %s %s\n' % (self.counters_prefix, k, v, ts)
+            stat_string += msg
 
             stats += 1
             ttl -= 1
@@ -214,43 +183,30 @@ class Server(object):
                     print "Sending %s ====> lower=%s, mean=%s, upper=%s, %dpct=%s, count=%s" \
                         % (k, min, mean, max, self.pct_threshold, max_threshold, count)
 
-                if self.transport == 'graphite':
-
-                    stat_string += TIMER_MSG % {
-                        'prefix': self.timers_prefix,
-                        'key': k,
-                        'mean': mean,
-                        'max': max,
-                        'min': min,
-                        'count': count,
-                        'max_threshold': max_threshold,
-                        'pct_threshold': self.pct_threshold,
-                        'ts': ts,
-                    }
-
-                else:
-                    # What group should these metrics be in. For the time being we'll set it to the name of the key
-                    group = k
-                    g.send(k + "_lower", min, "double", "time", "both", 60, self.dmax, group, self.ganglia_spoof_host)
-                    g.send(k + "_mean", mean, "double", "time", "both", 60, self.dmax, group, self.ganglia_spoof_host)
-                    g.send(k + "_upper", max, "double", "time", "both", 60, self.dmax, group, self.ganglia_spoof_host)
-                    g.send(k + "_count", count, "double", "count", "both", 60, self.dmax, group, self.ganglia_spoof_host)
-                    g.send(k + "_" + str(self.pct_threshold) + "pct", max_threshold, "double", "time", "both", 60, self.dmax, group, self.ganglia_spoof_host)
+                stat_string += TIMER_MSG % {
+                    'prefix': self.timers_prefix,
+                    'key': k,
+                    'mean': mean,
+                    'max': max,
+                    'min': min,
+                    'count': count,
+                    'max_threshold': max_threshold,
+                    'pct_threshold': self.pct_threshold,
+                    'ts': ts,
+                }
 
                 stats += 1
 
-        if self.transport == 'graphite':
-
-            stat_string += "statsd.numStats %s %d\n" % (stats, ts)
-            graphite = socket.socket()
-            try:
-                graphite.connect((self.graphite_host, self.graphite_port))
-                graphite.sendall(stat_string)
-                graphite.close()
-            except socket.error, e:
-                log.error("Error communicating with Graphite: %s" % e)
-                if self.debug:
-                    print "Error communicating with Graphite: %s" % e
+        stat_string += "statsd.numStats %s %d\n" % (stats, ts)
+        graphite = socket.socket()
+        try:
+            graphite.connect((self.graphite_host, self.graphite_port))
+            graphite.sendall(stat_string)
+            graphite.close()
+        except socket.error, e:
+            log.error("Error communicating with Graphite: %s" % e)
+            if self.debug:
+                print "Error communicating with Graphite: %s" % e
 
         self._set_timer()
 
@@ -290,12 +246,8 @@ class ServerDaemon(Daemon):
             setproctitle('pystatsd')
         server = Server(pct_threshold=options.pct,
                         debug=options.debug,
-                        transport=options.transport,
                         graphite_host=options.graphite_host,
                         graphite_port=options.graphite_port,
-                        ganglia_host=options.ganglia_host,
-                        ganglia_spoof_host=options.ganglia_spoof_host,
-                        ganglia_port=options.ganglia_port,
                         flush_interval=options.flush_interval,
                         gauge_hold=options.gauge_hold,
                         no_aggregate_counters=options.no_aggregate_counters,
@@ -312,12 +264,8 @@ def run_server():
     parser.add_argument('-d', '--debug', dest='debug', action='store_true', help='debug mode', default=False)
     parser.add_argument('-n', '--name', dest='name', help='hostname to run on ', default='')
     parser.add_argument('-p', '--port', dest='port', help='port to run on (default: 8125)', type=int, default=8125)
-    parser.add_argument('-r', '--transport', dest='transport', help='transport to use graphite or ganglia', type=str, default="graphite")
     parser.add_argument('--graphite-port', dest='graphite_port', help='port to connect to graphite on (default: 2003)', type=int, default=2003)
     parser.add_argument('--graphite-host', dest='graphite_host', help='host to connect to graphite on (default: localhost)', type=str, default='localhost')
-    parser.add_argument('--ganglia-port', dest='ganglia_port', help='port to connect to ganglia on', type=int, default=8649)
-    parser.add_argument('--ganglia-host', dest='ganglia_host', help='host to connect to ganglia on', type=str, default='localhost')
-    parser.add_argument('--ganglia-spoof-host', dest='ganglia_spoof_host', help='host to report metrics as to ganglia', type=str, default='statd:statd')
     parser.add_argument('--flush-interval', dest='flush_interval', help='how often to send data to graphite in millis (default: 10000)', type=int, default=10000)
     parser.add_argument('--gauge-hold', dest='gauge_hold', help='how long to keep gauges from dead metrics in flush intervals (default: 1)', type=int, default=1)
     parser.add_argument('--no-aggregate-counters', dest='no_aggregate_counters', help='should statsd report counters as absolute instead of count/sec', action='store_true')
