@@ -83,16 +83,24 @@ class Client(object):
         data = dict((stat, "%s|abs" % value) for stat in stats)
         self.send(data, sample_rate=1)
 
-    def gauge(self, stats, value):
+    def gauge(self, stats, value, hold=False):
         """
         Updates one or more gauge to a set value, stored directly
         in graphite
+
+        If hold==True, don't expire the value when there are no updates
+        (for infrequently updated values)
         >>> statsd_client.gauge('gauge',1000)
         """
         if not isinstance(stats, list):
             stats = [stats]
 
-        data = dict((stat, "%s|g" % value) for stat in stats)
+        if hold:
+            tag = 'gh'
+        else:
+            tag = 'g'
+
+        data = dict((stat, "%s|%s" % (value, tag)) for stat in stats)
         self.send(data, sample_rate=1)
 
     def cancel_stat(self, stats):

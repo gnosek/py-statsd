@@ -90,6 +90,9 @@ class Server(object):
             elif (fields[1] == 'g'):
                 value = float(fields[0])
                 self.gauges[key] = (value, self.gauge_hold+1)
+            elif (fields[1] == 'gh'):
+                value = float(fields[0])
+                self.gauges[key] = (value, None)
             elif (fields[1] == 'dc'):
                 if self.counters.get(key) == 0:
                     del self.counters[key]
@@ -153,12 +156,12 @@ class Server(object):
             stat_string += msg
 
             stats += 1
-            ttl -= 1
-
-            if ttl == 0:
-                del self.gauges[k]
-            else:
-                self.gauges[k] = (v, ttl)
+            if ttl is not None:
+                ttl -= 1
+                if ttl == 0:
+                    del self.gauges[k]
+                else:
+                    self.gauges[k] = (v, ttl)
 
         for k, v in self.timers.items():
             if len(v) > 0:
